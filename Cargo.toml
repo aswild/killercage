@@ -1,0 +1,11 @@
+[package]
+name = "killercage"
+version = "0.1.0"
+authors = ["Allen Wild <allenwild93@gmail.com>"]
+edition = "2021"
+
+[[bin]]
+name = "killercage"
+path = "src/bin/main.rs"
+
+[dependencies]

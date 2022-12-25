@@ -1,6 +1,7 @@
 use std::fmt;
 use std::iter::{FromIterator, Sum};
 use std::ops;
+use std::str::FromStr;
 
 /// A single valid Sudoku digit.
 #[repr(u8)]
@@ -88,6 +89,27 @@ impl From<Digit> for char {
             D7 => '7',
             D8 => '8',
             D9 => '9',
+        }
+    }
+}
+
+impl FromStr for Digit {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let val: u8 = s.parse()?;
+        // I want to use std's ParseIntError because it's got all the attributes we need, except
+        // that there's no proper way to construct one directly. However, I can do a conversion
+        // that I know will fail and return that as the error.
+        if val < 1 {
+            // IntErrorKind::NegOverflow
+            Err("-300".parse::<i8>().unwrap_err())
+        } else if val > 9 {
+            // IntErrorKind::PosOverflow
+            Err("300".parse::<u8>().unwrap_err())
+        } else {
+            // already checked that we're in range, can't panic
+            Ok(Self::new(val))
         }
     }
 }
@@ -332,6 +354,43 @@ mod tests {
         assert!(!ds.contains(D1));
         ds.remove(D1);
         assert!(!ds.contains(D1));
+    }
+
+    #[test]
+    fn digit_set_parse() {
+        use std::num::IntErrorKind;
+
+        assert_eq!("1".parse::<Digit>(), Ok(Digit::D1));
+        assert_eq!("9".parse::<Digit>(), Ok(Digit::D9));
+
+        assert_eq!(
+            "".parse::<Digit>().unwrap_err().kind(),
+            &IntErrorKind::Empty
+        );
+        assert_eq!(
+            "foo".parse::<Digit>().unwrap_err().kind(),
+            &IntErrorKind::InvalidDigit
+        );
+        // negative numbers happen to give InvalidDigit rather than NegOverflow because '-' is
+        // always an invalid character in an unsigned conversion (unlike '+' which can be optional)
+        assert_eq!(
+            "-1".parse::<Digit>().unwrap_err().kind(),
+            &IntErrorKind::InvalidDigit
+        );
+        assert_eq!(
+            "0".parse::<Digit>().unwrap_err().kind(),
+            &IntErrorKind::NegOverflow
+        );
+        // out of range only for sudoku
+        assert_eq!(
+            "10".parse::<Digit>().unwrap_err().kind(),
+            &IntErrorKind::PosOverflow
+        );
+        // out of range for u8
+        assert_eq!(
+            "1000".parse::<Digit>().unwrap_err().kind(),
+            &IntErrorKind::PosOverflow
+        );
     }
 
     #[test]

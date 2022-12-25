@@ -163,6 +163,12 @@ impl DigitSet {
         }
     }
 
+    /// Return an iterator of all possible `DigitSet`s
+    #[inline]
+    pub fn iter_all() -> AllSets {
+        AllSets::new()
+    }
+
     /// Is the set empty?
     pub fn is_empty(self) -> bool {
         self.digits == 0
@@ -383,6 +389,49 @@ impl ops::Not for DigitSet {
         }
     }
 }
+
+/// Iterator that yields all possible digit sets.
+///
+/// The iteration order is unspecified, and will not necessarily be sorted.
+#[derive(Debug, Clone, Default)]
+pub struct AllSets {
+    /// Counter from 0 (empty set) to 511 (all 9 digits included).
+    pos: u16,
+}
+
+impl AllSets {
+    /// Create a new Iterator over all possible [`DigitSet`]s
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
+impl Iterator for AllSets {
+    type Item = DigitSet;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= 512 {
+            None
+        } else {
+            // pos counts from 0-512, but DigitSet starts using bit position 1 so shift over
+            let ds = DigitSet {
+                digits: self.pos << 1,
+            };
+            ds.debug_check_valid();
+            self.pos += 1;
+            Some(ds)
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // we always know exactly how many elements will be yielded
+        let count = 512u16.saturating_sub(self.pos) as usize;
+        (count, Some(count))
+    }
+}
+
+// n.b. relies on size_hint being correct
+impl ExactSizeIterator for AllSets {}
 
 #[cfg(test)]
 mod tests {

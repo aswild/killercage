@@ -91,3 +91,47 @@ impl std::error::Error for ParseError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Constraint, ParseError};
+    use crate::digit::Digit;
+
+    macro_rules! assert_matches {
+        ($expression:expr, $(|)? $($pattern:pat_param)|+ $(if $guard:expr)? $(,)?) => {
+            match $expression {
+                $($pattern)|+ $(if $guard)? => (),
+                res => panic!(
+                    "{}: expected {:?} got {:?}",
+                    stringify!($expression),
+                    stringify!($($pattern)|+ $(if $guard)? => ()),
+                    res,
+                ),
+            }
+        };
+    }
+
+    #[test]
+    fn parse_single() {
+        use std::num::IntErrorKind;
+        use std::str::FromStr;
+
+        assert_matches!(Constraint::from_str("=10"), Ok(Constraint::Sum(10)));
+        assert_matches!(
+            Constraint::from_str("+9"),
+            Ok(Constraint::Contains(Digit::D9))
+        );
+        assert_matches!(
+            Constraint::from_str("-2"),
+            Ok(Constraint::Excludes(Digit::D2))
+        );
+        assert_matches!(Constraint::from_str("in 5"), Ok(Constraint::Count(5)));
+        assert_matches!(Constraint::from_str("  in5"), Ok(Constraint::Count(5)));
+        assert_matches!(Constraint::from_str("15"), Ok(Constraint::Sum(15)));
+
+        assert_matches!(
+            Constraint::from_str("+10"),
+            Err(ParseError::InvalidDigit(err)) if err.kind() == &IntErrorKind::PosOverflow,
+        );
+    }
+}

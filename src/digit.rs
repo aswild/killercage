@@ -3,6 +3,8 @@ use std::iter::{FromIterator, Sum};
 use std::ops;
 use std::str::FromStr;
 
+use crate::constraint::Constraint;
+
 /// A single valid Sudoku digit.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -195,6 +197,22 @@ impl DigitSet {
         Digit::ALL_DIGITS
             .into_iter()
             .filter(move |d| self.contains(*d))
+    }
+
+    /// Check whether this DigitSet satisfies a single constraint
+    #[inline]
+    pub fn satisfies(self, constraint: Constraint) -> bool {
+        constraint.matches(self)
+    }
+
+    /// Check whether this DigitSet satisfies all of the given constraints, using an Iterator as
+    /// input rather than a slice.
+    pub fn satisfies_all<I>(self, iter: I) -> bool
+    where
+        I: IntoIterator,
+        I::Item: AsRef<Constraint>,
+    {
+        iter.into_iter().all(|c| c.as_ref().matches(self))
     }
 }
 

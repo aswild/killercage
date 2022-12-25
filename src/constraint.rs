@@ -2,7 +2,7 @@ use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
-use crate::digit::Digit;
+use crate::digit::{Digit, DigitSet};
 
 /// regex macro, example in once_cell's docs
 #[macro_export]
@@ -13,7 +13,7 @@ macro_rules! regex {
     }};
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Constraint {
     /// The set must have a given sum (exactly)
@@ -26,6 +26,18 @@ pub enum Constraint {
     Excludes(Digit),
 }
 
+impl Constraint {
+    /// Check whether a [`DigitSet`] satisfies this constraint.
+    pub fn matches(self, set: DigitSet) -> bool {
+        match self {
+            Constraint::Sum(sum) => set.sum() == sum,
+            Constraint::Count(count) => set.len() == count,
+            Constraint::Contains(digit) => set.contains(digit),
+            Constraint::Excludes(digit) => !set.contains(digit),
+        }
+    }
+}
+
 impl fmt::Display for Constraint {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -34,6 +46,25 @@ impl fmt::Display for Constraint {
             Constraint::Contains(digit) => write!(f, "+{digit}"),
             Constraint::Excludes(digit) => write!(f, "-{digit}"),
         }
+    }
+}
+
+/// self-referential AsRef so that we can treat iterators over Constraint and &Constraint the same
+impl AsRef<Constraint> for Constraint {
+    #[inline]
+    fn as_ref(&self) -> &Constraint {
+        self
+    }
+}
+
+/// A single Constraint is an one-element iterator.
+impl IntoIterator for Constraint {
+    type Item = Constraint;
+    type IntoIter = std::iter::Once<Constraint>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        std::iter::once(self)
     }
 }
 
@@ -95,7 +126,7 @@ impl std::error::Error for ParseError {
 #[cfg(test)]
 mod tests {
     use super::{Constraint, ParseError};
-    use crate::digit::Digit;
+    use crate::digit::{Digit, DigitSet};
 
     macro_rules! assert_matches {
         ($expression:expr, $(|)? $($pattern:pat_param)|+ $(if $guard:expr)? $(,)?) => {
@@ -133,5 +164,32 @@ mod tests {
             Constraint::from_str("+10"),
             Err(ParseError::InvalidDigit(err)) if err.kind() == &IntErrorKind::PosOverflow,
         );
+    }
+
+    #[test]
+    fn satisfies() {
+        let ds1: DigitSet = [1, 2, 5].into();
+        let c1 = [Constraint::Count(3), Constraint::Sum(8)];
+        // we can iterate directly over the array
+        assert!(ds1.satisfies_all(c1));
+        // we can iterate over a slice derived from the array
+        assert!(ds1.satisfies_all(&c1[..]));
+
+        // a vector of constraints this time
+        let c2 = vec![
+            Constraint::Excludes(Digit::D9),
+            Constraint::Contains(Digit::D1),
+        ];
+        // iterate vector directly
+        assert!(ds1.satisfies_all(c2.iter()));
+        // make sure it's a slice
+        assert!(ds1.satisfies_all(c2.as_slice()));
+        // we can also just pass the vec by value
+        assert!(ds1.satisfies_all(c2));
+
+        // more tests
+        assert!(DigitSet::empty().satisfies(Constraint::Sum(0)));
+        assert!(DigitSet::empty().satisfies(Constraint::Count(0)));
+        assert!(DigitSet::from([2, 3, 4]).satisfies_all(Constraint::Sum(9)));
     }
 }

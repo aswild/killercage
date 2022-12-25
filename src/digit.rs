@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt;
 use std::iter::{FromIterator, Sum};
 use std::ops;
@@ -139,7 +140,7 @@ impl Sum<Digit> for u8 {
 }
 
 /// A set of non-repeating Sudoku digits
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Default)]
 pub struct DigitSet {
     /// A bitmask of which digits are present. Invariant: only bits 1-9 (inclusive, zero-indexed)
     /// will ever be set.
@@ -214,6 +215,12 @@ impl DigitSet {
     {
         iter.into_iter().all(|c| c.as_ref().matches(self))
     }
+
+    /// Panic if any invalid bits are set
+    #[inline]
+    fn debug_check_valid(self) {
+        debug_assert_eq!(self.digits & !Self::VALID_DIGIT_MASK, 0);
+    }
 }
 
 impl fmt::Display for DigitSet {
@@ -238,6 +245,58 @@ impl fmt::Display for DigitSet {
 impl fmt::Debug for DigitSet {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "DigitSet({self})")
+    }
+}
+
+impl PartialEq for DigitSet {
+    fn eq(&self, rhs: &DigitSet) -> bool {
+        self.debug_check_valid();
+        rhs.debug_check_valid();
+        self.digits == rhs.digits
+    }
+}
+
+impl Eq for DigitSet {}
+
+impl Ord for DigitSet {
+    fn cmp(&self, rhs: &DigitSet) -> Ordering {
+        if self == rhs {
+            return Ordering::Equal;
+        }
+
+        // a smaller set is always less than a bigger set
+        match self.len().cmp(&rhs.len()) {
+            Ordering::Less => return Ordering::Less,
+            Ordering::Greater => return Ordering::Greater,
+            Ordering::Equal => (),
+        }
+
+        // When the same length, do a lexographic ordering
+        for digit in Digit::ALL_DIGITS {
+            match (self.contains(digit), rhs.contains(digit)) {
+                // we have a digit they don't, we're less
+                (true, false) => return Ordering::Less,
+                // they have it, we're greater
+                (false, true) => return Ordering::Greater,
+                // we both do or don't have the digit, keep looking
+                _ => (),
+            }
+        }
+
+        // If we get here, they should be Equal, which was already checked.
+        if cfg!(debug_assertions) {
+            // panic in debug mode
+            unreachable!("Broken Ord::cmp equality check")
+        } else {
+            // just go with Equal in release mode
+            Ordering::Equal
+        }
+    }
+}
+
+impl PartialOrd for DigitSet {
+    fn partial_cmp(&self, rhs: &DigitSet) -> Option<Ordering> {
+        Some(self.cmp(rhs))
     }
 }
 

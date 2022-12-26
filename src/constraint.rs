@@ -171,9 +171,9 @@ mod tests {
         let ds1: DigitSet = [1, 2, 5].into();
         let c1 = [Constraint::Count(3), Constraint::Sum(8)];
         // we can iterate directly over the array
-        assert!(ds1.satisfies_all(c1));
+        assert!(ds1.satisfies(c1));
         // we can iterate over a slice derived from the array
-        assert!(ds1.satisfies_all(&c1[..]));
+        assert!(ds1.satisfies(&c1[..]));
 
         // a vector of constraints this time
         let c2 = vec![
@@ -181,15 +181,15 @@ mod tests {
             Constraint::Contains(Digit::D1),
         ];
         // iterate vector directly
-        assert!(ds1.satisfies_all(c2.iter()));
+        assert!(ds1.satisfies(c2.iter()));
         // make sure it's a slice
-        assert!(ds1.satisfies_all(c2.as_slice()));
+        assert!(ds1.satisfies(c2.as_slice()));
         // we can also just pass the vec by value
-        assert!(ds1.satisfies_all(c2));
+        assert!(ds1.satisfies(c2));
 
         // more tests
         assert!(DigitSet::empty().satisfies(Constraint::Sum(0)));
         assert!(DigitSet::empty().satisfies(Constraint::Count(0)));
-        assert!(DigitSet::from([2, 3, 4]).satisfies_all(Constraint::Sum(9)));
+        assert!(DigitSet::from([2, 3, 4]).satisfies(Constraint::Sum(9)));
     }
 }

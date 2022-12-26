@@ -206,15 +206,12 @@ impl DigitSet {
             .filter(move |d| self.contains(*d))
     }
 
-    /// Check whether this DigitSet satisfies a single constraint
-    #[inline]
-    pub fn satisfies(self, constraint: Constraint) -> bool {
-        constraint.matches(self)
-    }
-
-    /// Check whether this DigitSet satisfies all of the given constraints, using an Iterator as
-    /// input rather than a slice.
-    pub fn satisfies_all<I>(self, iter: I) -> bool
+    /// Check whether this DigitSet satisfies all of the given constraints.
+    ///
+    /// This function takes an iterator, which can be fullfilled by an array of Constraints,
+    /// a slice of Constraints, a single Constraint, or any other iterator that yields Constraint
+    /// or &Constraint.
+    pub fn satisfies<I>(self, iter: I) -> bool
     where
         I: IntoIterator,
         I::Item: AsRef<Constraint>,
@@ -555,5 +552,33 @@ mod tests {
 
         let inv = !ds;
         assert_eq!(inv, [5, 6, 7, 8, 9].into());
+    }
+
+    #[test]
+    fn allsets_iter() {
+        // verify that the AllDigits size hint is implemented properly
+        // ExactsizeIterator::is_empty() is unstable for now, can be tested with Nightly.
+        let mut count = 0;
+        let mut it = DigitSet::iter_all();
+        assert_eq!(it.size_hint(), (512, Some(512)));
+        assert_eq!(it.len(), 512);
+        //assert!(!it.is_empty());
+
+        for _ in 0..256 {
+            let _ = it.next();
+            count += 1;
+        }
+        assert_eq!(count, 256);
+        assert_eq!(it.size_hint(), (256, Some(256)));
+        assert_eq!(it.len(), 256);
+        //assert!(!it.is_empty());
+
+        for _ in it.by_ref() {
+            count += 1;
+        }
+        assert_eq!(count, 512);
+        assert_eq!(it.size_hint(), (0, Some(0)));
+        assert_eq!(it.len(), 0);
+        //assert!(it.is_empty());
     }
 }

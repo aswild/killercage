@@ -360,6 +360,31 @@ impl PartialOrd for DigitSet {
     }
 }
 
+impl From<Digit> for DigitSet {
+    #[inline]
+    fn from(digit: Digit) -> Self {
+        let mut set = DigitSet::empty();
+        set.add(digit);
+        set
+    }
+}
+
+impl FromStr for DigitSet {
+    type Err = ParseDigitError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            // Special case: an empty string is an error.
+            Err(ParseDigitError::Empty)
+        } else {
+            s.chars().try_fold(DigitSet::empty(), |mut ds, ch| {
+                ds.add(Digit::try_from(ch)?);
+                Ok(ds)
+            })
+        }
+    }
+}
+
 // To avoid really broad generic bounds, we only impl From for arrays and slices of Digit and u8,
 // rather than for any `T: TryInto<u8>` that could be passed to `Digit::try_new`. Also the u8 from
 // here will silently ignore out-of-range u8 values.
@@ -556,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    fn digit_set_parse() {
+    fn digit_parse() {
         use std::str::FromStr;
 
         assert_matches!("1".parse::<Digit>(), Ok(Digit::D1));
@@ -573,6 +598,15 @@ mod tests {
         assert_matches!(Digit::from_str("foo"), Err(ParseDigitError::TooLong));
         assert_matches!(Digit::from_str("10"), Err(ParseDigitError::TooLong));
         assert_matches!(Digit::from_str("0"), Err(ParseDigitError::InvalidCharacter));
+
+        let evens: DigitSet = [2, 4, 6, 8].into();
+        assert_eq!("2468".parse::<DigitSet>().unwrap(), evens);
+        assert_eq!("8642".parse::<DigitSet>().unwrap(), evens);
+        assert_matches!(
+            "123foo".parse::<DigitSet>(),
+            Err(ParseDigitError::InvalidCharacter)
+        );
+        assert_matches!("".parse::<DigitSet>(), Err(ParseDigitError::Empty));
     }
 
     #[test]

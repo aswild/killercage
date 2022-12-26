@@ -131,14 +131,8 @@ mod tests {
         use std::str::FromStr;
 
         assert_matches!(Constraint::from_str("=10"), Ok(Constraint::Sum(10)));
-        assert_matches!(
-            Constraint::from_str("+9"),
-            Ok(Constraint::Contains(Digit::D9))
-        );
-        assert_matches!(
-            Constraint::from_str("-2"),
-            Ok(Constraint::Excludes(Digit::D2))
-        );
+        assert_matches!(Constraint::from_str("+9"), Ok(Constraint::Contains(Digit::D9)));
+        assert_matches!(Constraint::from_str("-2"), Ok(Constraint::Excludes(Digit::D2)));
         assert_matches!(Constraint::from_str("in 5"), Ok(Constraint::Count(5)));
         assert_matches!(Constraint::from_str("  in5"), Ok(Constraint::Count(5)));
         assert_matches!(Constraint::from_str("15"), Ok(Constraint::Sum(15)));
@@ -159,10 +153,7 @@ mod tests {
         assert!(ds1.satisfies(&c1[..]));
 
         // a vector of constraints this time
-        let c2 = vec![
-            Constraint::Excludes(Digit::D9),
-            Constraint::Contains(Digit::D1),
-        ];
+        let c2 = vec![Constraint::Excludes(Digit::D9), Constraint::Contains(Digit::D1)];
         // iterate vector directly
         assert!(ds1.satisfies(c2.iter()));
         // make sure it's a slice

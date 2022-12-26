@@ -215,9 +215,7 @@ impl DigitSet {
 
     /// A digit set with all 9 digits included
     pub fn full() -> Self {
-        Self {
-            digits: Self::VALID_DIGIT_MASK,
-        }
+        Self { digits: Self::VALID_DIGIT_MASK }
     }
 
     /// Return an iterator of all possible `DigitSet`s
@@ -258,9 +256,7 @@ impl DigitSet {
 
     /// Iterate through the digits present in the set.
     pub fn iter(self) -> impl Iterator<Item = Digit> {
-        Digit::ALL_DIGITS
-            .into_iter()
-            .filter(move |d| self.contains(*d))
+        Digit::ALL_DIGITS.into_iter().filter(move |d| self.contains(*d))
     }
 
     /// Check whether this DigitSet satisfies all of the given constraints.
@@ -433,9 +429,7 @@ impl FromIterator<Digit> for DigitSet {
 impl ops::BitAnd for DigitSet {
     type Output = Self;
     fn bitand(self, rhs: DigitSet) -> DigitSet {
-        DigitSet {
-            digits: self.digits & rhs.digits,
-        }
+        DigitSet { digits: self.digits & rhs.digits }
     }
 }
 
@@ -448,9 +442,7 @@ impl ops::BitAndAssign for DigitSet {
 impl ops::BitOr for DigitSet {
     type Output = Self;
     fn bitor(self, rhs: DigitSet) -> DigitSet {
-        DigitSet {
-            digits: self.digits | rhs.digits,
-        }
+        DigitSet { digits: self.digits | rhs.digits }
     }
 }
 
@@ -463,9 +455,7 @@ impl ops::BitOrAssign for DigitSet {
 impl ops::Not for DigitSet {
     type Output = Self;
     fn not(self) -> DigitSet {
-        DigitSet {
-            digits: (!self.digits) & Self::VALID_DIGIT_MASK,
-        }
+        DigitSet { digits: (!self.digits) & Self::VALID_DIGIT_MASK }
     }
 }
 
@@ -493,9 +483,7 @@ impl Iterator for AllSets {
             None
         } else {
             // pos counts from 0-512, but DigitSet starts using bit position 1 so shift over
-            let ds = DigitSet {
-                digits: self.pos << 1,
-            };
+            let ds = DigitSet { digits: self.pos << 1 };
             ds.debug_check_valid();
             self.pos += 1;
             Some(ds)
@@ -602,26 +590,17 @@ mod tests {
         let evens: DigitSet = [2, 4, 6, 8].into();
         assert_eq!("2468".parse::<DigitSet>().unwrap(), evens);
         assert_eq!("8642".parse::<DigitSet>().unwrap(), evens);
-        assert_matches!(
-            "123foo".parse::<DigitSet>(),
-            Err(ParseDigitError::InvalidCharacter)
-        );
+        assert_matches!("123foo".parse::<DigitSet>(), Err(ParseDigitError::InvalidCharacter));
         assert_matches!("".parse::<DigitSet>(), Err(ParseDigitError::Empty));
     }
 
     #[test]
     fn digit_set_iter() {
-        let ds = [1, 2, 3, 4, 5]
-            .into_iter()
-            .map(Digit::new)
-            .collect::<DigitSet>();
+        let ds = [1, 2, 3, 4, 5].into_iter().map(Digit::new).collect::<DigitSet>();
         assert_eq!(ds.sum(), 15);
         assert_eq!(ds.len(), 5);
 
-        let ds = [9, 6, 3, 1]
-            .into_iter()
-            .map(Digit::new)
-            .collect::<DigitSet>();
+        let ds = [9, 6, 3, 1].into_iter().map(Digit::new).collect::<DigitSet>();
         assert_eq!(ds.sum(), 19);
         assert_eq!(ds.len(), 4);
 

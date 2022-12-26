@@ -62,6 +62,22 @@ impl Digit {
         })
     }
 
+    /// Convert a [`char`] (`'1'..='9'`) into a `Digit`
+    pub fn from_char(ch: char) -> Option<Self> {
+        match ch {
+            '1' => Some(Digit::D1),
+            '2' => Some(Digit::D2),
+            '3' => Some(Digit::D3),
+            '4' => Some(Digit::D4),
+            '5' => Some(Digit::D5),
+            '6' => Some(Digit::D6),
+            '7' => Some(Digit::D7),
+            '8' => Some(Digit::D8),
+            '9' => Some(Digit::D9),
+            _ => None,
+        }
+    }
+
     #[inline]
     fn mask_bit(self) -> u16 {
         1u16 << (self as u8)
@@ -96,48 +112,89 @@ impl From<Digit> for char {
     }
 }
 
+impl TryFrom<char> for Digit {
+    type Error = ParseDigitError;
+
+    fn try_from(ch: char) -> Result<Self, Self::Error> {
+        Self::from_char(ch).ok_or(ParseDigitError::InvalidCharacter)
+    }
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
+#[non_exhaustive]
+pub enum ParseDigitError {
+    /// String was empty
+    #[error("Empty string")]
+    Empty,
+
+    /// Extra characters found
+    #[error("Extra characters in string")]
+    TooLong,
+
+    /// Non-digit character encountered
+    #[error("Non-digit character")]
+    InvalidCharacter,
+
+    /// Out of range number
+    #[error("Out of range numeric value")]
+    OutOfRange,
+}
+
 impl FromStr for Digit {
-    type Err = std::num::ParseIntError;
+    type Err = ParseDigitError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let val: u8 = s.parse()?;
-        // I want to use std's ParseIntError because it's got all the attributes we need, except
-        // that there's no proper way to construct one directly. However, I can do a conversion
-        // that I know will fail and return that as the error.
-        if val < 1 {
-            // IntErrorKind::NegOverflow
-            Err("-300".parse::<i8>().unwrap_err())
-        } else if val > 9 {
-            // IntErrorKind::PosOverflow
-            Err("300".parse::<u8>().unwrap_err())
-        } else {
-            // already checked that we're in range, can't panic
-            Ok(Self::new(val))
+        match s {
+            "1" => Ok(Digit::D1),
+            "2" => Ok(Digit::D2),
+            "3" => Ok(Digit::D3),
+            "4" => Ok(Digit::D4),
+            "5" => Ok(Digit::D5),
+            "6" => Ok(Digit::D6),
+            "7" => Ok(Digit::D7),
+            "8" => Ok(Digit::D8),
+            "9" => Ok(Digit::D9),
+            _ => Err(match s.len() {
+                0 => ParseDigitError::Empty,
+                1 => ParseDigitError::InvalidCharacter,
+                _ => ParseDigitError::TooLong,
+            }),
         }
     }
 }
 
-macro_rules! impl_int_from_digit {
+// impl "From<Digit> for int", "TryFrom<int> for Digit", and "Sum<Digit> for int"
+// for all the unsigned and signed primitive int types. Do this with a macro because due to blanket
+// impls and coherence rules, it's basically impossible to write any generic TryFrom impl.
+macro_rules! impl_digit_for_ints {
     ($($ty:ident),+) => {
-        $(impl From<Digit> for $ty {
-            #[inline]
-            fn from(digit: Digit) -> $ty {
-                (digit as u8) as $ty
+        $(
+            impl From<Digit> for $ty {
+                #[inline]
+                fn from(digit: Digit) -> $ty {
+                    (digit as u8) as $ty
+                }
             }
-        })+
+
+            impl TryFrom<$ty> for Digit {
+                type Error = ParseDigitError;
+
+                #[inline]
+                fn try_from(int: $ty) -> Result<Digit, ParseDigitError> {
+                    Digit::try_new(int).ok_or(ParseDigitError::OutOfRange)
+                }
+            }
+
+            impl Sum<Digit> for $ty {
+                fn sum<I: Iterator<Item = Digit>>(iter: I) -> $ty {
+                    iter.map($ty::from).sum()
+                }
+            }
+        )+
     };
 }
-impl_int_from_digit!(u8, u16, u32, u64, u128);
-impl_int_from_digit!(i8, i16, i32, i64, i128);
-
-impl Sum<Digit> for u8 {
-    fn sum<I>(iter: I) -> Self
-    where
-        I: Iterator<Item = Digit>,
-    {
-        iter.map(u8::from).sum()
-    }
-}
+impl_digit_for_ints!(u8, u16, u32, u64, u128);
+impl_digit_for_ints!(i8, i16, i32, i64, i128);
 
 /// A set of non-repeating Sudoku digits
 #[derive(Clone, Copy, Default)]
@@ -432,7 +489,21 @@ impl ExactSizeIterator for AllSets {}
 
 #[cfg(test)]
 mod tests {
-    use super::{Digit, DigitSet};
+    use super::{Digit, DigitSet, ParseDigitError};
+
+    macro_rules! assert_matches {
+        ($expression:expr, $(|)? $($pattern:pat_param)|+ $(if $guard:expr)? $(,)?) => {
+            match $expression {
+                $($pattern)|+ $(if $guard)? => (),
+                res => panic!(
+                    "{}: expected {:?} got {:?}",
+                    stringify!($expression),
+                    stringify!($($pattern)|+ $(if $guard)? => ()),
+                    res,
+                ),
+            }
+        };
+    }
 
     #[test]
     fn digit_new() {
@@ -458,6 +529,11 @@ mod tests {
 
         assert_eq!(u64::from(D5), 5_u64);
         assert_eq!(i128::from(D8), 8_i128);
+
+        // check that the iterator sum trait works
+        assert_eq!(Digit::ALL_DIGITS.into_iter().sum::<u8>(), 45);
+        assert_eq!(Digit::ALL_DIGITS.into_iter().sum::<i32>(), 45);
+        assert_eq!(Digit::ALL_DIGITS.into_iter().sum::<u64>(), 45);
     }
 
     #[test]
@@ -481,39 +557,22 @@ mod tests {
 
     #[test]
     fn digit_set_parse() {
-        use std::num::IntErrorKind;
+        use std::str::FromStr;
 
-        assert_eq!("1".parse::<Digit>(), Ok(Digit::D1));
-        assert_eq!("9".parse::<Digit>(), Ok(Digit::D9));
+        assert_matches!("1".parse::<Digit>(), Ok(Digit::D1));
+        assert_matches!("2".parse::<Digit>(), Ok(Digit::D2));
+        assert_matches!("3".parse::<Digit>(), Ok(Digit::D3));
+        assert_matches!("4".parse::<Digit>(), Ok(Digit::D4));
+        assert_matches!("5".parse::<Digit>(), Ok(Digit::D5));
+        assert_matches!("6".parse::<Digit>(), Ok(Digit::D6));
+        assert_matches!("7".parse::<Digit>(), Ok(Digit::D7));
+        assert_matches!("8".parse::<Digit>(), Ok(Digit::D8));
+        assert_matches!("9".parse::<Digit>(), Ok(Digit::D9));
 
-        assert_eq!(
-            "".parse::<Digit>().unwrap_err().kind(),
-            &IntErrorKind::Empty
-        );
-        assert_eq!(
-            "foo".parse::<Digit>().unwrap_err().kind(),
-            &IntErrorKind::InvalidDigit
-        );
-        // negative numbers happen to give InvalidDigit rather than NegOverflow because '-' is
-        // always an invalid character in an unsigned conversion (unlike '+' which can be optional)
-        assert_eq!(
-            "-1".parse::<Digit>().unwrap_err().kind(),
-            &IntErrorKind::InvalidDigit
-        );
-        assert_eq!(
-            "0".parse::<Digit>().unwrap_err().kind(),
-            &IntErrorKind::NegOverflow
-        );
-        // out of range only for sudoku
-        assert_eq!(
-            "10".parse::<Digit>().unwrap_err().kind(),
-            &IntErrorKind::PosOverflow
-        );
-        // out of range for u8
-        assert_eq!(
-            "1000".parse::<Digit>().unwrap_err().kind(),
-            &IntErrorKind::PosOverflow
-        );
+        assert_matches!(Digit::from_str(""), Err(ParseDigitError::Empty));
+        assert_matches!(Digit::from_str("foo"), Err(ParseDigitError::TooLong));
+        assert_matches!(Digit::from_str("10"), Err(ParseDigitError::TooLong));
+        assert_matches!(Digit::from_str("0"), Err(ParseDigitError::InvalidCharacter));
     }
 
     #[test]

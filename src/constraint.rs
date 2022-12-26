@@ -2,7 +2,7 @@ use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
-use crate::digit::{Digit, DigitSet};
+use crate::digit::{Digit, DigitSet, ParseDigitError};
 
 /// regex macro, example in once_cell's docs
 #[macro_export]
@@ -88,45 +88,29 @@ impl FromStr for Constraint {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum ParseError {
-    /// A digit value was out of range
-    InvalidDigit(ParseIntError),
+    /// Invalid sudoku digit
+    #[error("Invalid sudoku digit: {0}")]
+    InvalidDigit(#[from] ParseDigitError),
+
+    /// Invalid numeric value
+    #[error("Invalid number: {0}")]
+    InvalidNumber(#[from] ParseIntError),
+
     /// Unknown constraint name/operator
+    #[error("Unknown constraint operator: {0:?}")]
     UnknownOperator(String),
+
     /// Couldn't even find a number, what are you even doing?
+    #[error("Couldn't match constraint format")]
     NoMatch,
-}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidDigit(err) => write!(f, "Invalid number: {err}"),
-            Self::UnknownOperator(s) => write!(f, "Unknown constraint operator: {s:?}"),
-            Self::NoMatch => f.write_str("Input didn't match format"),
-        }
-    }
-}
-
-impl From<ParseIntError> for ParseError {
-    fn from(val: ParseIntError) -> Self {
-        Self::InvalidDigit(val)
-    }
-}
-
-impl std::error::Error for ParseError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::InvalidDigit(err) => Some(err),
-            _ => None,
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Constraint, ParseError};
-    use crate::digit::{Digit, DigitSet};
+    use crate::digit::{Digit, DigitSet, ParseDigitError};
 
     macro_rules! assert_matches {
         ($expression:expr, $(|)? $($pattern:pat_param)|+ $(if $guard:expr)? $(,)?) => {
@@ -144,7 +128,6 @@ mod tests {
 
     #[test]
     fn parse_single() {
-        use std::num::IntErrorKind;
         use std::str::FromStr;
 
         assert_matches!(Constraint::from_str("=10"), Ok(Constraint::Sum(10)));
@@ -162,7 +145,7 @@ mod tests {
 
         assert_matches!(
             Constraint::from_str("+10"),
-            Err(ParseError::InvalidDigit(err)) if err.kind() == &IntErrorKind::PosOverflow,
+            Err(ParseError::InvalidDigit(ParseDigitError::TooLong))
         );
     }
 

@@ -77,7 +77,7 @@ impl FromStr for Constraint {
         // Any single constraint is a not-digit prefix followed by some digits. We strip whitespace
         // off of both because it doesn't really matter.
         let re = regex!(r"^([^\d]*)(\d+)\s*$");
-        let caps = re.captures(s).ok_or(ParseError::NoMatch)?;
+        let caps = re.captures(s).ok_or_else(|| ParseError::NoMatch(s.into()))?;
         let op = caps.get(1).unwrap().as_str().trim();
         let num = caps.get(2).unwrap().as_str().trim();
 
@@ -106,8 +106,32 @@ pub enum ParseError {
     UnknownOperator(String),
 
     /// Couldn't even find a number, what are you even doing?
-    #[error("Couldn't match constraint format")]
-    NoMatch,
+    #[error("Couldn't match constraint format in string {0:?}")]
+    NoMatch(String),
+}
+
+/// Parse a single string of multiple constraints into a vec.
+///
+/// This parses a single string such as "5 in 2 +1" into a series of [`Constraint`]s like `[Sum(5),
+/// Count(2), Includes(DigitSet(1))]`.
+///
+/// The vec argument will be appended to, it doesn't need to be cleared first. If Err is returned,
+/// some constraints may have been added to the vec.
+pub fn parse_many(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), ParseError> {
+    let re = regex!(r"^(?P<cons>[^\d]*\d+)(?:\s+(?P<rest>.*)|$)");
+    loop {
+        let caps = re.captures(s).ok_or_else(|| ParseError::NoMatch(s.into()))?;
+        let cons_str = caps.name("cons").unwrap().as_str();
+        let cons: Constraint = cons_str.parse()?;
+        vec.push(cons);
+
+        s = match caps.name("rest") {
+            Some(s) => s.as_str(),
+            None => break,
+        };
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -178,5 +202,35 @@ mod tests {
         assert!(!ds1.satisfies(Constraint::Includes([1, 3].into())));
         assert!(ds1.satisfies(Constraint::Excludes([7, 8].into())));
         assert!(!ds1.satisfies(Constraint::Excludes([1, 6].into())));
+    }
+
+    #[test]
+    fn parse_many() {
+        // explicit type so that this evaluates to slice refs rather than arrays
+        let tests: &[(&str, &[Constraint])] = &[
+            ("20 in 4", &[Constraint::Sum(20), Constraint::Count(4)]),
+            ("10", &[Constraint::Sum(10)]),
+            (
+                "9 in 3 -1",
+                &[Constraint::Sum(9), Constraint::Count(3), Constraint::Excludes(Digit::D1.into())],
+            ),
+        ];
+
+        let mut cons = Vec::new();
+        for (input, expected) in tests {
+            cons.clear();
+            super::parse_many(input, &mut cons).unwrap();
+            assert_eq!(&cons, expected);
+        }
+
+        // failing tests
+        cons.clear();
+        assert_matches!(super::parse_many("1 in foo", &mut cons), Err(ParseError::NoMatch(_)));
+        assert_matches!(super::parse_many("", &mut cons), Err(ParseError::NoMatch(_)));
+        assert_matches!(super::parse_many("meow", &mut cons), Err(ParseError::NoMatch(_)));
+        assert_matches!(
+            super::parse_many("8 +0", &mut cons),
+            Err(ParseError::InvalidDigit(ParseDigitError::InvalidCharacter))
+        );
     }
 }

@@ -1,10 +1,19 @@
-use killercage::constraint::Constraint;
-
 fn main() {
-    let cons = [Constraint::Count(5), Constraint::Sum(25)];
-    let sets = killercage::matching_sets(&cons);
-
-    for ds in sets {
-        println!("{ds}");
+    let mut constraints = Vec::new();
+    for arg in std::env::args().skip(1) {
+        constraints.clear();
+        match killercage::constraint::parse_many(&arg, &mut constraints) {
+            Ok(()) => {
+                let sets = killercage::matching_sets(&constraints);
+                print!("{arg}: {constraints:?}: ");
+                let mut first = true;
+                for set in sets {
+                    print!("{}{}", if first { "" } else { " " }, set);
+                    first = false;
+                }
+                println!();
+            }
+            Err(err) => println!("Error: {err}"),
+        }
     }
 }

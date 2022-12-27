@@ -2,14 +2,16 @@ use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
 
-use crate::digit::{Digit, DigitSet, ParseDigitError};
+use once_cell::sync::OnceCell;
+use regex::Regex;
+
+use crate::digit::{DigitSet, ParseDigitError};
 
 /// regex macro, example in once_cell's docs
-#[macro_export]
 macro_rules! regex {
     ($re:literal $(,)?) => {{
-        static RE: once_cell::sync::OnceCell<regex::Regex> = once_cell::sync::OnceCell::new();
-        RE.get_or_init(|| regex::Regex::new($re).unwrap())
+        static RE: OnceCell<Regex> = OnceCell::new();
+        RE.get_or_init(|| Regex::new($re).unwrap())
     }};
 }
 
@@ -20,10 +22,10 @@ pub enum Constraint {
     Sum(u8),
     /// The set must have this many digits
     Count(u8),
-    /// The set must include this digit
-    Contains(Digit),
-    /// The set must not include this digit
-    Excludes(Digit),
+    /// The set must include all of these digits
+    Includes(DigitSet),
+    /// The set must not include any of these digits
+    Excludes(DigitSet),
 }
 
 impl Constraint {
@@ -32,8 +34,8 @@ impl Constraint {
         match self {
             Constraint::Sum(sum) => set.sum() == sum,
             Constraint::Count(count) => set.len() == count,
-            Constraint::Contains(digit) => set.contains(digit),
-            Constraint::Excludes(digit) => !set.contains(digit),
+            Constraint::Includes(digits) => (set & digits) == digits,
+            Constraint::Excludes(digits) => (set & digits) == DigitSet::empty(),
         }
     }
 }
@@ -43,8 +45,8 @@ impl fmt::Display for Constraint {
         match self {
             Constraint::Sum(sum) => write!(f, "={sum}"),
             Constraint::Count(count) => write!(f, "in {count}"),
-            Constraint::Contains(digit) => write!(f, "+{digit}"),
-            Constraint::Excludes(digit) => write!(f, "-{digit}"),
+            Constraint::Includes(digits) => write!(f, "+{digits}"),
+            Constraint::Excludes(digits) => write!(f, "-{digits}"),
         }
     }
 }
@@ -72,15 +74,16 @@ impl FromStr for Constraint {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim();
-        let re = regex!(r"^(?P<prefix>\S*?)\s*(?P<number>\d+)$");
+        // Any single constraint is a not-digit prefix followed by some digits. We strip whitespace
+        // off of both because it doesn't really matter.
+        let re = regex!(r"^([^\d]*)(\d+)\s*$");
         let caps = re.captures(s).ok_or(ParseError::NoMatch)?;
-        let num = caps.name("number").unwrap().as_str();
-        let op = caps.name("prefix").unwrap().as_str();
+        let op = caps.get(1).unwrap().as_str().trim();
+        let num = caps.get(2).unwrap().as_str().trim();
 
         match op {
-            "+" => Ok(Self::Contains(num.parse::<Digit>()?)),
-            "-" => Ok(Self::Excludes(num.parse::<Digit>()?)),
+            "+" => Ok(Self::Includes(num.parse()?)),
+            "-" => Ok(Self::Excludes(num.parse()?)),
             "" | "=" => Ok(Self::Sum(num.parse::<u8>()?)),
             "in" => Ok(Self::Count(num.parse::<u8>()?)),
             other => Err(ParseError::UnknownOperator(other.to_owned())),
@@ -129,17 +132,20 @@ mod tests {
     #[test]
     fn parse_single() {
         use std::str::FromStr;
+        use Digit::*;
 
-        assert_matches!(Constraint::from_str("=10"), Ok(Constraint::Sum(10)));
-        assert_matches!(Constraint::from_str("+9"), Ok(Constraint::Contains(Digit::D9)));
-        assert_matches!(Constraint::from_str("-2"), Ok(Constraint::Excludes(Digit::D2)));
-        assert_matches!(Constraint::from_str("in 5"), Ok(Constraint::Count(5)));
-        assert_matches!(Constraint::from_str("  in5"), Ok(Constraint::Count(5)));
-        assert_matches!(Constraint::from_str("15"), Ok(Constraint::Sum(15)));
+        assert_eq!(Constraint::from_str("=10").unwrap(), Constraint::Sum(10));
+        assert_eq!(Constraint::from_str("+9").unwrap(), Constraint::Includes(D9.into()));
+        assert_eq!(Constraint::from_str("-2").unwrap(), Constraint::Excludes(D2.into()));
+        assert_eq!(Constraint::from_str("in 5").unwrap(), Constraint::Count(5));
+        assert_eq!(Constraint::from_str("  in5").unwrap(), Constraint::Count(5));
+        assert_eq!(Constraint::from_str("15").unwrap(), Constraint::Sum(15));
+        assert_eq!(Constraint::from_str("+79").unwrap(), Constraint::Includes([7, 9].into()));
+        assert_eq!(Constraint::from_str("-123").unwrap(), Constraint::Excludes([1, 2, 3].into()));
 
         assert_matches!(
             Constraint::from_str("+10"),
-            Err(ParseError::InvalidDigit(ParseDigitError::TooLong))
+            Err(ParseError::InvalidDigit(ParseDigitError::InvalidCharacter))
         );
     }
 
@@ -153,7 +159,8 @@ mod tests {
         assert!(ds1.satisfies(&c1[..]));
 
         // a vector of constraints this time
-        let c2 = vec![Constraint::Excludes(Digit::D9), Constraint::Contains(Digit::D1)];
+        let c2 =
+            vec![Constraint::Excludes(Digit::D9.into()), Constraint::Includes(Digit::D1.into())];
         // iterate vector directly
         assert!(ds1.satisfies(c2.iter()));
         // make sure it's a slice
@@ -165,5 +172,11 @@ mod tests {
         assert!(DigitSet::empty().satisfies(Constraint::Sum(0)));
         assert!(DigitSet::empty().satisfies(Constraint::Count(0)));
         assert!(DigitSet::from([2, 3, 4]).satisfies(Constraint::Sum(9)));
+
+        // includes/excludes with multiple digits
+        assert!(ds1.satisfies(Constraint::Includes([1, 2].into())));
+        assert!(!ds1.satisfies(Constraint::Includes([1, 3].into())));
+        assert!(ds1.satisfies(Constraint::Excludes([7, 8].into())));
+        assert!(!ds1.satisfies(Constraint::Excludes([1, 6].into())));
     }
 }

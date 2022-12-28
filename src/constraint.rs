@@ -110,15 +110,23 @@ pub enum ParseError {
     NoMatch(String),
 }
 
-/// Parse a single string of multiple constraints into a vec.
+/// Parse a Constraint Sentence (single string of multiple constraints) into a Vec.
 ///
 /// This parses a single string such as "5 in 2 +1" into a series of [`Constraint`]s like `[Sum(5),
 /// Count(2), Includes(DigitSet(1))]`.
 ///
-/// The vec argument will be appended to, it doesn't need to be cleared first. If Err is returned,
-/// some constraints may have been added to the vec.
-pub fn parse_many(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), ParseError> {
-    let re = regex!(r"^(?P<cons>[^\d]*\d+)(?:\s+(?P<rest>.*)|$)");
+/// Parsed constraints will be appended in order to the `vec` argument. If Err is returned, some
+/// constraints may have been added to the vec.
+pub fn parse_sentence(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), ParseError> {
+    // parse one constraint, then optional whitespace, then more stuff. "rest" is the input of the
+    // regex match on the next loop.
+    let re = regex!(r"^(?P<cons>[^\d]*\d+)\s*(?:(?P<rest>.+)|$)");
+
+    // special case: an empty (or all-whitespace) string is not an error
+    if s.trim().is_empty() {
+        return Ok(());
+    }
+
     loop {
         let caps = re.captures(s).ok_or_else(|| ParseError::NoMatch(s.into()))?;
         let cons_str = caps.name("cons").unwrap().as_str();
@@ -126,7 +134,7 @@ pub fn parse_many(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), ParseErr
         vec.push(cons);
 
         s = match caps.name("rest") {
-            Some(s) => s.as_str(),
+            Some(rest) => rest.as_str(),
             None => break,
         };
     }
@@ -205,7 +213,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_many() {
+    fn parse_sentence() {
         // explicit type so that this evaluates to slice refs rather than arrays
         let tests: &[(&str, &[Constraint])] = &[
             ("20 in 4", &[Constraint::Sum(20), Constraint::Count(4)]),
@@ -219,18 +227,21 @@ mod tests {
         let mut cons = Vec::new();
         for (input, expected) in tests {
             cons.clear();
-            super::parse_many(input, &mut cons).unwrap();
+            super::parse_sentence(input, &mut cons).unwrap();
             assert_eq!(&cons, expected);
         }
 
         // failing tests
         cons.clear();
-        assert_matches!(super::parse_many("1 in foo", &mut cons), Err(ParseError::NoMatch(_)));
-        assert_matches!(super::parse_many("", &mut cons), Err(ParseError::NoMatch(_)));
-        assert_matches!(super::parse_many("meow", &mut cons), Err(ParseError::NoMatch(_)));
+        assert_matches!(super::parse_sentence("1 in foo", &mut cons), Err(ParseError::NoMatch(_)));
+        assert_matches!(super::parse_sentence("meow", &mut cons), Err(ParseError::NoMatch(_)));
         assert_matches!(
-            super::parse_many("8 +0", &mut cons),
+            super::parse_sentence("8 +0", &mut cons),
             Err(ParseError::InvalidDigit(ParseDigitError::InvalidCharacter))
         );
+
+        // empty is allowed
+        assert_matches!(super::parse_sentence("", &mut cons), Ok(_));
+        assert_matches!(super::parse_sentence("  \t\n ", &mut cons), Ok(_));
     }
 }

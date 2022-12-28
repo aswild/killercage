@@ -38,6 +38,8 @@ fn handle_sentence(input: &str) {
 }
 
 fn main() {
+    serif::Config::new().with_default(tracing::Level::WARN).init();
+
     let mut input = Editor::<()>::new().expect("failed to init readline");
     input.set_auto_add_history(true);
     println!("Welcome to the Killer Sudoku cage calculator!");

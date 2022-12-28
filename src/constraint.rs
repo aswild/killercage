@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use once_cell::sync::OnceCell;
 use regex::Regex;
+use tracing::{debug, trace};
 
 use crate::digit::{DigitSet, ParseDigitError};
 
@@ -73,6 +74,7 @@ impl IntoIterator for Constraint {
 impl FromStr for Constraint {
     type Err = ParseError;
 
+    #[tracing::instrument(level = "trace")]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Any single constraint is a not-digit prefix followed by some digits. We strip whitespace
         // off of both because it doesn't really matter.
@@ -80,6 +82,7 @@ impl FromStr for Constraint {
         let caps = re.captures(s).ok_or_else(|| ParseError::NoMatch(s.into()))?;
         let op = caps.get(1).unwrap().as_str().trim();
         let num = caps.get(2).unwrap().as_str().trim();
+        trace!(op = op, num = num, "regex matched for Constraint");
 
         match op {
             "+" => Ok(Self::Includes(num.parse()?)),
@@ -117,6 +120,7 @@ pub enum ParseError {
 ///
 /// Parsed constraints will be appended in order to the `vec` argument. If Err is returned, some
 /// constraints may have been added to the vec.
+#[tracing::instrument(level = "debug", skip(vec))]
 pub fn parse_sentence(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), ParseError> {
     // parse one constraint, then optional whitespace, then more stuff. "rest" is the input of the
     // regex match on the next loop.
@@ -130,7 +134,9 @@ pub fn parse_sentence(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), Pars
     loop {
         let caps = re.captures(s).ok_or_else(|| ParseError::NoMatch(s.into()))?;
         let cons_str = caps.name("cons").unwrap().as_str();
+        debug!(constraint = cons_str, "got one constraint string");
         let cons: Constraint = cons_str.parse()?;
+        debug!(constraint = ?cons, "parsed one constraint");
         vec.push(cons);
 
         s = match caps.name("rest") {

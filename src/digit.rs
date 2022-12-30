@@ -122,6 +122,14 @@ impl TryFrom<char> for Digit {
     }
 }
 
+/// self-referential AsRef so that we can treat iterators over Digit and &Digit the same
+impl AsRef<Digit> for Digit {
+    #[inline]
+    fn as_ref(&self) -> &Digit {
+        self
+    }
+}
+
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum ParseDigitError {
@@ -211,12 +219,12 @@ impl DigitSet {
     const VALID_DIGIT_MASK: u16 = 0b0000_0011_1111_1110;
 
     /// An empty set with no digits set.
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self { digits: 0 }
     }
 
     /// A digit set with all 9 digits included
-    pub fn full() -> Self {
+    pub const fn full() -> Self {
         Self { digits: Self::VALID_DIGIT_MASK }
     }
 
@@ -258,26 +266,31 @@ impl DigitSet {
 
     /// Is the set empty?
     pub fn is_empty(self) -> bool {
+        self.debug_check_valid();
         self.digits == 0
     }
 
     /// How many digits are present in this set?
     pub fn len(self) -> u8 {
+        self.debug_check_valid();
         self.digits.count_ones() as u8
     }
 
     /// Add a digit to the set. Does nothing if the digit already exists
     pub fn add(&mut self, digit: Digit) {
-        self.digits |= digit.mask_bit()
+        self.digits |= digit.mask_bit();
+        self.debug_check_valid();
     }
 
     /// Remove a digit from the set. Does nothing if the digit already wasn't included.
     pub fn remove(&mut self, digit: Digit) {
-        self.digits &= !digit.mask_bit()
+        self.digits &= !digit.mask_bit();
+        self.debug_check_valid();
     }
 
     /// Check whether a digit exists in this set.
     pub fn contains(self, digit: Digit) -> bool {
+        self.debug_check_valid();
         (self.digits & digit.mask_bit()) != 0
     }
 
@@ -360,14 +373,11 @@ impl Ord for DigitSet {
         }
 
         // When the same length, do a lexographic ordering
-        for digit in Digit::ALL_DIGITS {
-            match (self.contains(digit), rhs.contains(digit)) {
-                // we have a digit they don't, we're less
-                (true, false) => return Ordering::Less,
-                // they have it, we're greater
-                (false, true) => return Ordering::Greater,
-                // we both do or don't have the digit, keep looking
-                _ => (),
+        for (ours, theirs) in self.iter().zip(rhs.iter()) {
+            match ours.cmp(&theirs) {
+                Ordering::Less => return Ordering::Less,
+                Ordering::Greater => return Ordering::Greater,
+                Ordering::Equal => (),
             }
         }
 
@@ -445,14 +455,17 @@ impl From<&[u8]> for DigitSet {
     }
 }
 
-impl FromIterator<Digit> for DigitSet {
+impl<T> FromIterator<T> for DigitSet
+where
+    T: AsRef<Digit>,
+{
     fn from_iter<I>(iter: I) -> Self
     where
-        I: IntoIterator<Item = Digit>,
+        I: IntoIterator<Item = T>,
     {
         let mut set = DigitSet::empty();
         for digit in iter {
-            set.add(digit)
+            set.add(*digit.as_ref());
         }
         set
     }
@@ -488,6 +501,46 @@ impl ops::Not for DigitSet {
     type Output = Self;
     fn not(self) -> DigitSet {
         DigitSet { digits: (!self.digits) & Self::VALID_DIGIT_MASK }
+    }
+}
+
+// BitOr interoperability between Digit and DigitSet
+
+impl ops::BitOr<Digit> for Digit {
+    type Output = DigitSet;
+
+    #[inline]
+    fn bitor(self, rhs: Digit) -> DigitSet {
+        let mut set = DigitSet::empty();
+        set.add(self);
+        set.add(rhs);
+        set
+    }
+}
+
+impl ops::BitOr<DigitSet> for Digit {
+    type Output = DigitSet;
+
+    #[inline]
+    fn bitor(self, mut set: DigitSet) -> DigitSet {
+        set.add(self);
+        set
+    }
+}
+
+impl ops::BitOr<Digit> for DigitSet {
+    type Output = DigitSet;
+
+    #[inline]
+    fn bitor(mut self, digit: Digit) -> DigitSet {
+        self.add(digit);
+        self
+    }
+}
+
+impl ops::BitOrAssign<Digit> for DigitSet {
+    fn bitor_assign(&mut self, rhs: Digit) {
+        self.add(rhs);
     }
 }
 

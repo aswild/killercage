@@ -9,6 +9,28 @@ use once_cell::sync::OnceCell;
 use crate::constraint::Constraint;
 
 /// A single valid Sudoku digit.
+///
+/// `Digit` is represented as a `u8` with the same value, so it can be trivially converted to any
+/// integer type using `as` or [`From`].
+///
+/// ```
+/// # use killercage::digit::Digit;
+/// assert_eq!(Digit::D1 as u8, 1u8);
+/// assert_eq!(Digit::D2 as u32, 2u32);
+/// assert_eq!(i32::from(Digit::D3), 3i32);
+/// ```
+///
+/// `Digit` can also be created from integer types and characters using [`TryFrom`], or from
+/// strings using [`FromStr`].
+///
+/// ```
+/// # use killercage::digit::Digit;
+/// assert_eq!(Digit::try_from(5).unwrap(), Digit::D5);
+/// assert_eq!(Digit::try_from('6').unwrap(), Digit::D6);
+/// assert_eq!("7".parse::<Digit>().unwrap(), Digit::D7);
+/// assert!(Digit::try_from(10).is_err());
+/// assert!("foobar".parse::<Digit>().is_err());
+/// ```
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Digit {
@@ -122,7 +144,7 @@ impl TryFrom<char> for Digit {
     }
 }
 
-/// self-referential AsRef so that we can treat iterators over Digit and &Digit the same
+/// self-referential AsRef so that we can generically treat iterators over Digit and &Digit the same
 impl AsRef<Digit> for Digit {
     #[inline]
     fn as_ref(&self) -> &Digit {
@@ -130,6 +152,7 @@ impl AsRef<Digit> for Digit {
     }
 }
 
+/// Errors that may occur when parsing a [`Digit`]
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum ParseDigitError {
@@ -206,7 +229,104 @@ macro_rules! impl_digit_for_ints {
 impl_digit_for_ints!(u8, u16, u32, u64, u128);
 impl_digit_for_ints!(i8, i16, i32, i64, i128);
 
-/// A set of non-repeating Sudoku digits
+/// A set of non-repeating Sudoku digits.
+///
+/// [`DigitSet`] is a small, efficient, [`Copy`] type, therefore most methods accept `self` by
+/// value rather than by reference.
+///
+/// Like standard Killer Sudoku rules, `DigitSet`s do not include repeating digits, and no ordering
+/// is stored.
+///
+/// ```
+/// # use killercage::digit::{Digit, DigitSet};
+/// let mut set1 = DigitSet::empty();
+/// set1.add(Digit::D1);
+/// set1.add(Digit::D2);
+/// set1.add(Digit::D3);
+/// set1.add(Digit::D1);
+/// set1.remove(Digit::D3);
+///
+/// let mut set2 = DigitSet::from([2, 1]);
+///
+/// assert_eq!(set1, set2);
+/// ```
+///
+/// # Constructing
+/// There are many ways to construct a DigitSet:
+///  * Start with one of the constructors and then use the `add` and `remove` methods
+///  * Collect from an iterator that yields `Digit` or `&Digit` (or any other `AsRef<Digit>`) items
+///  * Convert from a slice or array of digits
+///  * Convert from a slice or array of `u8`s. When converting this way, invalid values (outside
+///    the range `1..=9`) are silently ignored.
+///  * Use the `|` operator with `Digit`s or other `DigitSet`s
+///  * From a string of digits like `"1234"`.
+///
+/// ```
+/// # use killercage::digit::{Digit, DigitSet};
+/// let mut set = DigitSet::empty();
+/// set.add(Digit::D1);
+/// set.add(Digit::D2);
+///
+/// let mut set = DigitSet::full();
+/// set.remove(Digit::D7);
+/// set.remove(Digit::D8);
+///
+/// let set: DigitSet = Digit::D1 | Digit::D2;
+/// let set2 = set | Digit::D3;
+/// let set3 = Digit::D3 | set;
+/// assert_eq!(set2, set3);
+///
+/// let mut set = DigitSet::from(Digit::D1);
+/// set |= Digit::D2;
+/// assert_eq!(set, DigitSet::from([1, 2]));
+///
+/// let set: DigitSet = [1, 2, 3, 100].into();
+/// assert_eq!(set, set2);
+///
+/// let odds_from_iter = Digit::ALL_DIGITS
+///     .iter()
+///     .filter(|d| (**d as u8) % 2 == 1)
+///     .collect::<DigitSet>();
+///
+/// let odds_from_str: DigitSet = "13579".parse().unwrap();
+/// let odds_or = Digit::D1 | Digit::D3 | Digit::D5 | Digit::D7 | Digit::D9;
+/// assert_eq!(odds_from_iter, odds_from_str);
+/// assert_eq!(odds_from_iter, odds_or);
+/// ```
+///
+/// # Formatting
+/// `DigitSet` implements [`Display`]. By default, digits are formatted with no space in between
+/// them, and format's [fill/alignment] is respected. The empty set is formatted as `[empty]`. When
+/// formatted with the alternate `#` mode, digits are rendered as a list.
+///
+/// [`Display`]: std::fmt::Display
+/// [fill/alignment]: https://doc.rust-lang.org/std/fmt/index.html#fillalignment
+///
+/// ```
+/// # use killercage::DigitSet;
+/// let set = DigitSet::from([1, 2, 5]);
+/// assert_eq!(format!("{set}"), "125");
+/// assert_eq!(format!("{set:9}"), "125      ");
+/// assert_eq!(format!("{set:>9}"), "      125");
+/// assert_eq!(format!("{set:-<5}"), "125--");
+/// assert_eq!(format!("{set:#}"), "[1, 2, 5]");
+/// assert_eq!(format!("{set:?}"), "DigitSet([1, 2, 5])");
+/// ```
+///
+/// # Ordering
+/// `DigitSet` implements [`Ord`] and is ordered as followes:
+///  * A smaller set (i.e. containing fewer digits) is always less than a larger set
+///  * Two sets of equal length are sorted lexicographically
+///  * Two sets are equal when they contain exactly the same digits.
+///
+/// ```
+/// # use killercage::{Digit, DigitSet};
+/// let set_789: DigitSet = [7, 8, 9].into();
+/// let set_1345: DigitSet = [1, 3, 4, 5].into();
+/// let set_1239: DigitSet = [1, 2, 3, 9].into();
+/// assert!(set_789 < set_1345);
+/// assert!(set_1239 < set_1345);
+/// ```
 #[derive(Clone, Copy, Default)]
 pub struct DigitSet {
     /// A bitmask of which digits are present. Invariant: only bits 1-9 (inclusive, zero-indexed)
@@ -232,7 +352,7 @@ impl DigitSet {
     ///
     /// There are 512 possible sets (including the empty set), since each digit 1-9 is either
     /// included or excluded. The returned slice will be sorted by length first, and then
-    /// lexographically by the digits that are present.
+    /// lexicographically by the digits that are present.
     pub fn all_sets() -> &'static [DigitSet] {
         // Lazily initialize the list in a static OnceCell. Technically this "leaks" memory for the
         // rest of the program, but is's only a 1K allocation.
@@ -276,13 +396,13 @@ impl DigitSet {
         self.digits.count_ones() as u8
     }
 
-    /// Add a digit to the set. Does nothing if the digit already exists
+    /// Add a digit to the set.
     pub fn add(&mut self, digit: Digit) {
         self.digits |= digit.mask_bit();
         self.debug_check_valid();
     }
 
-    /// Remove a digit from the set. Does nothing if the digit already wasn't included.
+    /// Remove a digit from the set.
     pub fn remove(&mut self, digit: Digit) {
         self.digits &= !digit.mask_bit();
         self.debug_check_valid();
@@ -294,12 +414,14 @@ impl DigitSet {
         (self.digits & digit.mask_bit()) != 0
     }
 
-    /// Total of all digits in this set.
+    /// Total value of all digits in this set.
     pub fn sum(self) -> u8 {
         self.iter().sum()
     }
 
     /// Iterate through the digits present in the set.
+    ///
+    /// Digits will be yielded in increasing order.
     pub fn iter(self) -> impl Iterator<Item = Digit> {
         Digit::ALL_DIGITS.into_iter().filter(move |d| self.contains(*d))
     }
@@ -317,7 +439,7 @@ impl DigitSet {
         iter.into_iter().all(|c| c.as_ref().matches(self))
     }
 
-    /// Panic if any invalid bits are set
+    /// Panic if any invalid bits are set, only when debug assertions are enabled.
     #[inline]
     fn debug_check_valid(self) {
         debug_assert_eq!(self.digits & !Self::VALID_DIGIT_MASK, 0);
@@ -326,9 +448,20 @@ impl DigitSet {
 
 impl fmt::Display for DigitSet {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        /// Dumb workaround for formatting DigitSet with the alternate flag.
+        /// I want something like "[1, 2, 3]" with the help of DebugList, but since the alternate
+        /// flag is set in DigitSet::fmt, it gets printed by std's alternate-debug representation
+        /// with newlines. Use this wrapper to obtain a DebugList in "normal" mode.
+        struct DigitSetList(DigitSet);
+        impl fmt::Display for DigitSetList {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.debug_list().entries(self.0.iter().map(u8::from)).finish()
+            }
+        }
+
         if f.alternate() {
-            // alternate format, display as a list
-            f.debug_list().entries(self.iter().map(u8::from)).finish()
+            // Alternate format, display as a list
+            write!(f, "{}", DigitSetList(*self))
         } else {
             let mut s = String::with_capacity(9);
             if self.is_empty() {
@@ -345,7 +478,7 @@ impl fmt::Display for DigitSet {
 
 impl fmt::Debug for DigitSet {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "DigitSet({self})")
+        write!(f, "DigitSet({self:#})")
     }
 }
 
@@ -372,7 +505,7 @@ impl Ord for DigitSet {
             Ordering::Equal => (),
         }
 
-        // When the same length, do a lexographic ordering
+        // When the same length, do a lexicographic ordering
         for (ours, theirs) in self.iter().zip(rhs.iter()) {
             match ours.cmp(&theirs) {
                 Ordering::Less => return Ordering::Less,
@@ -398,6 +531,7 @@ impl PartialOrd for DigitSet {
     }
 }
 
+/// A single Digit converts into a DigitSet containing only that digit.
 impl From<Digit> for DigitSet {
     #[inline]
     fn from(digit: Digit) -> Self {
@@ -433,9 +567,9 @@ impl<const N: usize> From<[Digit; N]> for DigitSet {
     }
 }
 
+/// Construct a DigitSet from an array of `u8` values. Not all `u8` values represent valid sudoku
+/// digits: out-of-range values will be silently ignored.
 impl<const N: usize> From<[u8; N]> for DigitSet {
-    /// Construct a DigitSet from an array of `u8` values. Not all `u8` values represent valid
-    /// sudoku digits: out-of-range values will be silently ignored.
     fn from(arr: [u8; N]) -> Self {
         arr.into_iter().filter_map(Digit::try_new).collect()
     }
@@ -447,14 +581,15 @@ impl From<&[Digit]> for DigitSet {
     }
 }
 
+/// Construct a DigitSet from a slice of `u8` values. Not all `u8` values represent valid sudoku
+/// digits: out-of-range values will be silently ignored.
 impl From<&[u8]> for DigitSet {
-    /// Construct a DigitSet from a slice of `u8` values. Not all `u8` values represent valid
-    /// sudoku digits: out-of-range values will be silently ignored.
     fn from(slice: &[u8]) -> Self {
         slice.iter().copied().filter_map(Digit::try_new).collect()
     }
 }
 
+/// Construct a Digit set from an iterator that yields Digits.
 impl<T> FromIterator<T> for DigitSet
 where
     T: AsRef<Digit>,
@@ -471,6 +606,7 @@ where
     }
 }
 
+/// Return the set intersection between two DigitSets
 impl ops::BitAnd for DigitSet {
     type Output = Self;
     fn bitand(self, rhs: DigitSet) -> DigitSet {
@@ -484,6 +620,7 @@ impl ops::BitAndAssign for DigitSet {
     }
 }
 
+/// Return the set union between two DigitSets
 impl ops::BitOr for DigitSet {
     type Output = Self;
     fn bitor(self, rhs: DigitSet) -> DigitSet {
@@ -497,6 +634,7 @@ impl ops::BitOrAssign for DigitSet {
     }
 }
 
+/// Return the inverse of a DigitSet
 impl ops::Not for DigitSet {
     type Output = Self;
     fn not(self) -> DigitSet {
@@ -506,6 +644,7 @@ impl ops::Not for DigitSet {
 
 // BitOr interoperability between Digit and DigitSet
 
+/// Digits can be or'd together to form a DigitSet
 impl ops::BitOr<Digit> for Digit {
     type Output = DigitSet;
 
@@ -518,6 +657,7 @@ impl ops::BitOr<Digit> for Digit {
     }
 }
 
+/// Digits can be or'd with a DigitSet to produce a new DigitSet
 impl ops::BitOr<DigitSet> for Digit {
     type Output = DigitSet;
 
@@ -528,6 +668,7 @@ impl ops::BitOr<DigitSet> for Digit {
     }
 }
 
+/// Digits can be or'd with a DigitSet to produce a new DigitSet
 impl ops::BitOr<Digit> for DigitSet {
     type Output = DigitSet;
 
@@ -538,6 +679,7 @@ impl ops::BitOr<Digit> for DigitSet {
     }
 }
 
+/// Add a digit to the set. Equivalent to [`DigitSet::add`].
 impl ops::BitOrAssign<Digit> for DigitSet {
     fn bitor_assign(&mut self, rhs: Digit) {
         self.add(rhs);

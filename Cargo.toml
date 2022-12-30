@@ -10,6 +10,7 @@ path = "src/bin/main.rs"
 required-features = ["cli"]
 
 [dependencies]
+clap = { version = "4", features = ["cargo", "wrap_help"], optional = true }
 once_cell = "1"
 regex = "1"
 rustyline = { version = "10", optional = true }
@@ -19,4 +20,4 @@ tracing = "0.1"
 
 [features]
 default = ["cli"]
-cli = ["dep:rustyline", "dep:serif"]
+cli = ["dep:clap", "dep:rustyline", "dep:serif"]

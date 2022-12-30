@@ -72,14 +72,14 @@ impl IntoIterator for Constraint {
 }
 
 impl FromStr for Constraint {
-    type Err = ParseError;
+    type Err = ParseConstraintError;
 
     #[tracing::instrument(level = "trace")]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Any single constraint is a not-digit prefix followed by some digits. We strip whitespace
         // off of both because it doesn't really matter.
         let re = regex!(r"^([^\d]*)(\d+)\s*$");
-        let caps = re.captures(s).ok_or_else(|| ParseError::NoMatch(s.into()))?;
+        let caps = re.captures(s).ok_or_else(|| ParseConstraintError::NoMatch(s.into()))?;
         let op = caps.get(1).unwrap().as_str().trim();
         let num = caps.get(2).unwrap().as_str().trim();
         trace!(op = op, num = num, "regex matched for Constraint");
@@ -89,13 +89,13 @@ impl FromStr for Constraint {
             "-" => Ok(Self::Excludes(num.parse()?)),
             "" | "=" => Ok(Self::Sum(num.parse::<u8>()?)),
             "in" => Ok(Self::Count(num.parse::<u8>()?)),
-            other => Err(ParseError::UnknownOperator(other.to_owned())),
+            other => Err(ParseConstraintError::UnknownOperator(other.to_owned())),
         }
     }
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum ParseError {
+pub enum ParseConstraintError {
     /// Invalid sudoku digit
     #[error("Invalid sudoku digit: {0}")]
     InvalidDigit(#[from] ParseDigitError),
@@ -121,7 +121,7 @@ pub enum ParseError {
 /// Parsed constraints will be appended in order to the `vec` argument. If Err is returned, some
 /// constraints may have been added to the vec.
 #[tracing::instrument(level = "debug", skip(vec))]
-pub fn parse_sentence(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), ParseError> {
+pub fn parse_sentence(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), ParseConstraintError> {
     // parse one constraint, then optional whitespace, then more stuff. "rest" is the input of the
     // regex match on the next loop.
     let re = regex!(r"^(?P<cons>[^\d]*\d+)\s*(?:(?P<rest>.+)|$)");
@@ -132,7 +132,7 @@ pub fn parse_sentence(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), Pars
     }
 
     loop {
-        let caps = re.captures(s).ok_or_else(|| ParseError::NoMatch(s.into()))?;
+        let caps = re.captures(s).ok_or_else(|| ParseConstraintError::NoMatch(s.into()))?;
         let cons_str = caps.name("cons").unwrap().as_str();
         debug!(constraint = cons_str, "got one constraint string");
         let cons: Constraint = cons_str.parse()?;
@@ -150,7 +150,7 @@ pub fn parse_sentence(mut s: &str, vec: &mut Vec<Constraint>) -> Result<(), Pars
 
 #[cfg(test)]
 mod tests {
-    use super::{Constraint, ParseError};
+    use super::{Constraint, ParseConstraintError};
     use crate::digit::{Digit, DigitSet, ParseDigitError};
 
     macro_rules! assert_matches {
@@ -183,7 +183,7 @@ mod tests {
 
         assert_matches!(
             Constraint::from_str("+10"),
-            Err(ParseError::InvalidDigit(ParseDigitError::InvalidCharacter))
+            Err(ParseConstraintError::InvalidDigit(ParseDigitError::InvalidCharacter))
         );
     }
 
@@ -239,11 +239,17 @@ mod tests {
 
         // failing tests
         cons.clear();
-        assert_matches!(super::parse_sentence("1 in foo", &mut cons), Err(ParseError::NoMatch(_)));
-        assert_matches!(super::parse_sentence("meow", &mut cons), Err(ParseError::NoMatch(_)));
+        assert_matches!(
+            super::parse_sentence("1 in foo", &mut cons),
+            Err(ParseConstraintError::NoMatch(_))
+        );
+        assert_matches!(
+            super::parse_sentence("meow", &mut cons),
+            Err(ParseConstraintError::NoMatch(_))
+        );
         assert_matches!(
             super::parse_sentence("8 +0", &mut cons),
-            Err(ParseError::InvalidDigit(ParseDigitError::InvalidCharacter))
+            Err(ParseConstraintError::InvalidDigit(ParseDigitError::InvalidCharacter))
         );
 
         // empty is allowed

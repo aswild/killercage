@@ -4,6 +4,8 @@ use std::iter::{FromIterator, Sum};
 use std::ops;
 use std::str::FromStr;
 
+use once_cell::sync::OnceCell;
+
 use crate::constraint::Constraint;
 
 /// A single valid Sudoku digit.
@@ -218,10 +220,40 @@ impl DigitSet {
         Self { digits: Self::VALID_DIGIT_MASK }
     }
 
+    /// Get a slice of all possible `DigitSet`s.
+    ///
+    /// There are 512 possible sets (including the empty set), since each digit 1-9 is either
+    /// included or excluded. The returned slice will be sorted by length first, and then
+    /// lexographically by the digits that are present.
+    pub fn all_sets() -> &'static [DigitSet] {
+        // Lazily initialize the list in a static OnceCell. Technically this "leaks" memory for the
+        // rest of the program, but is's only a 1K allocation.
+        static CELL: OnceCell<Vec<DigitSet>> = OnceCell::new();
+
+        // auto-deref helps us out here (&Vec<DigitSet> -> &[DigitSet])
+        CELL.get_or_init(|| {
+            let mut vec = Vec::with_capacity(512);
+            for n in 0..512 {
+                // There's 9 used bits in DigitSet, we can just iterate through all those
+                // integers. But since we start with bit 1 rather than bit 0, shift over 1.
+                let ds = DigitSet { digits: n << 1 };
+                ds.debug_check_valid();
+                vec.push(ds);
+            }
+            vec.sort_unstable();
+            vec
+        })
+    }
+
     /// Return an iterator of all possible `DigitSet`s
+    ///
+    /// This is a shortcut for `DigitSet::all_sets().iter().copied()`, which is exposed through the
+    /// slightly unusual return type here. By returning `std`'s iterator types directly, the
+    /// resulting iterator implements `DoubleEndedIterator`, `ExactSizeIterator`, and other traits
+    /// that provide optimizations within Rust's iterator APIs.
     #[inline]
-    pub fn iter_all() -> AllSets {
-        AllSets::new()
+    pub fn iter_all() -> std::iter::Copied<std::slice::Iter<'static, DigitSet>> {
+        DigitSet::all_sets().iter().copied()
     }
 
     /// Is the set empty?
@@ -459,47 +491,6 @@ impl ops::Not for DigitSet {
     }
 }
 
-/// Iterator that yields all possible digit sets.
-///
-/// The iteration order is unspecified, and will not necessarily be sorted.
-#[derive(Debug, Clone, Default)]
-pub struct AllSets {
-    /// Counter from 0 (empty set) to 511 (all 9 digits included).
-    pos: u16,
-}
-
-impl AllSets {
-    /// Create a new Iterator over all possible [`DigitSet`]s
-    pub fn new() -> Self {
-        Default::default()
-    }
-}
-
-impl Iterator for AllSets {
-    type Item = DigitSet;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.pos >= 512 {
-            None
-        } else {
-            // pos counts from 0-512, but DigitSet starts using bit position 1 so shift over
-            let ds = DigitSet { digits: self.pos << 1 };
-            ds.debug_check_valid();
-            self.pos += 1;
-            Some(ds)
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        // we always know exactly how many elements will be yielded
-        let count = 512u16.saturating_sub(self.pos) as usize;
-        (count, Some(count))
-    }
-}
-
-// n.b. relies on size_hint being correct
-impl ExactSizeIterator for AllSets {}
-
 #[cfg(test)]
 mod tests {
     use super::{Digit, DigitSet, ParseDigitError};
@@ -628,7 +619,21 @@ mod tests {
 
     #[test]
     fn allsets_iter() {
-        // verify that the AllDigits size hint is implemented properly
+        // is_sorted is unstable, implement it (naively) ourselves
+        //assert!(DigitSet::all_sets().is_sorted());
+        let all_sets: &[DigitSet] = DigitSet::all_sets();
+        assert_eq!(all_sets.len(), 512);
+        for i in 1..all_sets.len() {
+            assert!(all_sets[i - 1] < all_sets[i]);
+        }
+
+        // make sure iterating all_sets is equivalent to iter_all
+        for (a, b) in all_sets.iter().zip(DigitSet::iter_all()) {
+            assert_eq!(*a, b);
+        }
+
+        // These tests were written for a custom AllSets iterator type, but they still pass when
+        // exposing a slice and using std's iterator types.
         // ExactsizeIterator::is_empty() is unstable for now, can be tested with Nightly.
         let mut count = 0;
         let mut it = DigitSet::iter_all();

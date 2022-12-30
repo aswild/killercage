@@ -6,8 +6,6 @@ pub use digit::DigitSet;
 
 /// Return a sorted Vec of all DigitSets that match the given list of constraints.
 pub fn matching_sets(constraints: &[Constraint]) -> Vec<DigitSet> {
-    let mut sets: Vec<DigitSet> =
-        DigitSet::iter_all().filter(|set| set.satisfies(constraints)).collect();
-    sets.sort_unstable();
-    sets
+    // DigitSet::iter_all yields elements in sorted order, no need to sort after collecting.
+    DigitSet::iter_all().filter(|set| set.satisfies(constraints)).collect()
 }

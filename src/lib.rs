@@ -2,7 +2,7 @@ pub mod constraint;
 pub mod digit;
 
 pub use constraint::{parse_sentence, Constraint};
-pub use digit::DigitSet;
+pub use digit::{Digit, DigitSet};
 
 /// Return a sorted Vec of all DigitSets that match the given list of constraints.
 pub fn matching_sets(constraints: &[Constraint]) -> Vec<DigitSet> {

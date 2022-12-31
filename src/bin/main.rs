@@ -68,9 +68,14 @@ fn run_interactive() {
         match input.readline("> ") {
             Ok(raw_line) => {
                 match raw_line.trim() {
+                    // skip blank lines (don't add to history)
                     line if line.is_empty() => continue,
+                    // allow # for comment lines (do add to history)
+                    line if line.starts_with('#') => (),
+                    // special commands
                     "q" | "quit" | "exit" => break,
                     "h" | "help" | "?" | "/?" => println!("[TODO: help text goes here]"),
+                    // default case
                     line => handle_sentence(line),
                 }
                 input.add_history_entry(raw_line);

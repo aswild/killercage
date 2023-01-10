@@ -88,7 +88,7 @@ impl FromStr for Constraint {
             "+" => Ok(Self::Includes(num.parse()?)),
             "-" => Ok(Self::Excludes(num.parse()?)),
             "" | "=" => Ok(Self::Sum(num.parse::<u8>()?)),
-            "in" => Ok(Self::Count(num.parse::<u8>()?)),
+            "in" | "i" => Ok(Self::Count(num.parse::<u8>()?)),
             other => Err(ParseConstraintError::UnknownOperator(other.to_owned())),
         }
     }
@@ -177,6 +177,7 @@ mod tests {
         assert_eq!(Constraint::from_str("-2").unwrap(), Constraint::Excludes(D2.into()));
         assert_eq!(Constraint::from_str("in 5").unwrap(), Constraint::Count(5));
         assert_eq!(Constraint::from_str("  in5").unwrap(), Constraint::Count(5));
+        assert_eq!(Constraint::from_str("i6").unwrap(), Constraint::Count(6));
         assert_eq!(Constraint::from_str("15").unwrap(), Constraint::Sum(15));
         assert_eq!(Constraint::from_str("+79").unwrap(), Constraint::Includes([7, 9].into()));
         assert_eq!(Constraint::from_str("-123").unwrap(), Constraint::Excludes([1, 2, 3].into()));

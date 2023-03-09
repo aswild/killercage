@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use clap::{Arg, ArgAction};
-use rustyline::{error::ReadlineError, Editor};
+use rustyline::{error::ReadlineError, DefaultEditor};
 
 use killercage::DigitSet;
 
@@ -60,7 +60,8 @@ fn handle_sentence(input: &str) {
 }
 
 fn run_interactive() {
-    let mut input = Editor::<()>::new().expect("failed to init readline");
+    let mut input = DefaultEditor::new().expect("failed to init readline");
+
     println!("Welcome to the Killer Sudoku cage calculator!");
 
     let mut ctrlc = false;
@@ -78,7 +79,9 @@ fn run_interactive() {
                     // default case
                     line => handle_sentence(line),
                 }
-                input.add_history_entry(raw_line);
+                if let Err(e) = input.add_history_entry(raw_line) {
+                    tracing::debug!("Failed to add history entry: {e}");
+                }
             }
             Err(ReadlineError::Interrupted) => {
                 if ctrlc {

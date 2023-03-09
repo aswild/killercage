@@ -107,7 +107,10 @@ fn run_interactive() {
 }
 
 fn main() {
-    serif::Config::new().with_default(tracing::Level::WARN).init();
+    serif::Config::new()
+        .with_default(tracing::Level::WARN)
+        .with_timestamp(serif::TimeFormat::none())
+        .init();
 
     let args = clap::command!()
         .about("Helper for getting possibile sets of digits for Killer Sudoku cages")

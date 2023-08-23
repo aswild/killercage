@@ -1,8 +1,8 @@
 use std::fmt;
 use std::num::ParseIntError;
 use std::str::FromStr;
+use std::sync::OnceLock;
 
-use once_cell::sync::OnceCell;
 use regex::Regex;
 use tracing::{debug, trace};
 
@@ -11,7 +11,7 @@ use crate::digit::{DigitSet, ParseDigitError};
 /// regex macro, example in once_cell's docs
 macro_rules! regex {
     ($re:literal $(,)?) => {{
-        static RE: OnceCell<Regex> = OnceCell::new();
+        static RE: OnceLock<Regex> = OnceLock::new();
         RE.get_or_init(|| Regex::new($re).unwrap())
     }};
 }

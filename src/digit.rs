@@ -3,8 +3,7 @@ use std::fmt;
 use std::iter::{FromIterator, Sum};
 use std::ops;
 use std::str::FromStr;
-
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 use crate::constraint::Constraint;
 
@@ -354,9 +353,9 @@ impl DigitSet {
     /// included or excluded. The returned slice will be sorted by length first, and then
     /// lexicographically by the digits that are present.
     pub fn all_sets() -> &'static [DigitSet] {
-        // Lazily initialize the list in a static OnceCell. Technically this "leaks" memory for the
+        // Lazily initialize the list in a static OnceLock. Technically this "leaks" memory for the
         // rest of the program, but is's only a 1K allocation.
-        static CELL: OnceCell<Vec<DigitSet>> = OnceCell::new();
+        static CELL: OnceLock<Vec<DigitSet>> = OnceLock::new();
 
         // auto-deref helps us out here (&Vec<DigitSet> -> &[DigitSet])
         CELL.get_or_init(|| {

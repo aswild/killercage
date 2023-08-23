@@ -13,8 +13,8 @@ required-features = ["cli"]
 clap = { version = "4", features = ["cargo", "wrap_help"], optional = true }
 regex = "1"
 rustyline = { version = "12", default-features = false, optional = true }
-serif = { version = "0.1", optional = true }
-thiserror = "1"
+serif = { version = "0.1.4", optional = true }
+thiserror = "1.0.47"
 tracing = "0.1"
 
 [features]
